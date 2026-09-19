@@ -213,7 +213,7 @@
 
     // Fetch list of files from GitHub repository /database folder on load
     window.addEventListener('DOMContentLoaded', () => {
-        fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DB_FOLDER}`)
+        fetch("https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + DB_FOLDER)
             .then(response => {
                 if (!response.ok) throw new Error("Database folder not found yet.");
                 return response.json();
@@ -224,7 +224,6 @@
                     if (file.name.endsWith('.json')) {
                         const option = document.createElement('option');
                         option.value = file.download_url;
-                        // Format clean display name from filename
                         option.textContent = file.name.replace('.json', '').replace(/_/g, ' ');
                         select.appendChild(option);
                     }
@@ -260,7 +259,6 @@
         const file = event.target.files[0];
         if (!file) return;
 
-        // Reset dropdown selection
         document.getElementById('dbSelect').value = "";
 
         const reader = new FileReader();
@@ -287,13 +285,13 @@
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
         const divs = data.divisions || 4;
-        const verSuffix = versionNum > 1 ? `_v${versionNum}` : '';
-        return `${cleanName}_${beats}_${divs}${verSuffix}.json`;
+        const verSuffix = versionNum > 1 ? "_v" + versionNum : "";
+        return cleanName + "_" + beats + "_" + divs + verSuffix + ".json";
     }
 
     function renderPreview(data) {
         document.getElementById('previewArea').style.display = 'block';
-        document.getElementById('timeSig').textContent = `${data.beats \vert{}\vert{} 4} /${data.divisions || 4}`;
+        document.getElementById('timeSig').textContent = (data.beats || 4) + " / " + (data.divisions || 4);
 
         const container = document.getElementById('patternsOutput');
         container.innerHTML = '';
@@ -313,10 +311,10 @@
             
             const headerDiv = document.createElement('div');
             headerDiv.className = 'pattern-header';
-            headerDiv.innerHTML = `<h2>${pt.title}</h2>`;
+            headerDiv.innerHTML = '<h2>' + pt.title + '</h2>';
             
             const playBtn = document.createElement('button');
-            playBtn.textContent = `▶ Play ${pt.title}`;
+            playBtn.textContent = '▶ Play ' + pt.title;
             playBtn.onclick = () => playPattern(data[pt.key]);
             headerDiv.appendChild(playBtn);
             sectionDiv.appendChild(headerDiv);
@@ -328,14 +326,14 @@
 
             let headerHtml = '<tr><th>Instrument</th>';
             for (let i = 0; i < stepCount; i++) {
-                headerHtml += `<th>${i + 1}</th>`;
+                headerHtml += '<th>' + (i + 1) + '</th>';
             }
             headerHtml += '</tr>';
             table.innerHTML = headerHtml;
 
             trackNames.forEach(instrument => {
                 const steps = tracks[instrument];
-                let rowHtml = `<tr><td class="instrument-name">${instrument}</td>`;
+                let rowHtml = '<tr><td class="instrument-name">' + instrument + '</td>';
                 
                 for (let i = 0; i < stepCount; i++) {
                     const val = steps[i] || 0;
@@ -343,7 +341,7 @@
                     if (val === 100) cssClass = 'step-active-100';
                     else if (val > 0) cssClass = 'step-active-75';
 
-                    rowHtml += `<td class="step-cell ${cssClass}" data-pattern="${pt.key}" data-inst="${instrument}" data-step="${i}">${val > 0 ? val : '-'}</td>`;
+                    rowHtml += '<td class="step-cell ' + cssClass + '" data-pattern="' + pt.key + '" data-inst="' + instrument + '" data-step="' + i + '">' + (val > 0 ? val : '-') + '</td>';
                 }
                 rowHtml += '</tr>';
                 table.innerHTML += rowHtml;
@@ -393,13 +391,13 @@
         
         const suggestedFileName = generateFileName(currentData, Math.floor(Math.random() * 900) + 100);
         const jsonContent = JSON.stringify(currentData, null, 2);
-        const clipboardText = `Suggested Filename: \`${suggestedFileName}\`\n\n\`\`\`json\n${jsonContent}\n\`\`\``;
+        const clipboardText = "Suggested Filename: `" + suggestedFileName + "`\n\n```json\n" + jsonContent + "\n```";
 
         navigator.clipboard.writeText(clipboardText).then(() => {
             showToast();
             
             const title = "Community Pattern Submission: " + (currentData.name || 'Untitled');
-            const githubUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/issues/new?title=` + encodeURIComponent(title) + "&labels=pattern-submission";
+            const githubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/issues/new?title=" + encodeURIComponent(title) + "&labels=pattern-submission";
             
             setTimeout(() => {
                 window.open(githubUrl, '_blank');
