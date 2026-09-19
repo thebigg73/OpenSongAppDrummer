@@ -311,21 +311,9 @@
     const DB_FOLDER = "database";
     const KIT_FOLDER = "kit";
 
-    // Strict professional instrument display order
     const INSTRUMENT_ORDER = [
-        "Kick",
-        "Snare",
-        "Rimshot",
-        "Stick",
-        "HiHat closed",
-        "HiHat open",
-        "Floor tom",
-        "Mid tom",
-        "High tom",
-        "Crash",
-        "Splash",
-        "Ride",
-        "Ride bell"
+        "Kick", "Snare", "Rimshot", "Stick", "HiHat closed", "HiHat open",
+        "Floor tom", "Mid tom", "High tom", "Crash", "Splash", "Ride", "Ride bell"
     ];
 
     const ACOUSTIC_FILES = {
@@ -377,7 +365,6 @@
         }
     }
 
-    // Global hook for Android app WebView direct JSON pattern injection
     window.loadAppPattern = function(jsonString) {
         try {
             currentData = JSON.parse(jsonString);
@@ -706,17 +693,19 @@
         });
     }
 
-    // Download / Save Handler: Intercepts for Android App or falls back to Browser Download
+    // Download / Save Handler: Intercepts for Android App (passing fileName, JSON, and active kit)
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
         const fileName = generateSmartFileName(currentData);
         const jsonString = JSON.stringify(currentData, null, 2);
+        const activeKit = document.getElementById('kitSelect').value; // 'acoustic' or 'percussion'
 
         // Check if Android App interface is available
         if (window.mainActivityInterface && window.mainActivityInterface.savePatternToFile) {
             try {
-                window.mainActivityInterface.savePatternToFile(fileName, jsonString);
+                // Pass filename, JSON content, and kit type to Android app
+                window.mainActivityInterface.savePatternToFile(fileName, jsonString, activeKit);
 
                 const toast = document.getElementById("toast");
                 toast.textContent = "Saved to OpenSong/Drummer/" + fileName;
