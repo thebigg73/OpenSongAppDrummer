@@ -122,6 +122,11 @@
             background-color: #444;
         }
         td.beat-divider { border-left: 2px solid #bb86fc; }
+        .step-active-127 {
+            background-color: #ffb74d;
+            color: #121212;
+            font-weight: bold;
+        }
         .step-active-100 {
             background-color: #bb86fc;
             color: #121212;
@@ -261,7 +266,7 @@
         <div class="action-bar">
             <button id="saveBtn" class="secondary">💾 Download to Device</button>
             <button id="submitBtn" class="submit-btn">🚀 Propose to Community Database</button>
-            <span style="font-size: 12px; color: #aaa;">💡 Tip: Click any grid cell to cycle hit intensity (Off → 50 → 75 → 100 → Off).</span>
+            <span style="font-size: 12px; color: #aaa;">💡 Tip: Click any grid cell to cycle hit intensity (Off → 50 → 75 → 100 → 127 → Off).</span>
         </div>
 
         <div id="patternsOutput"></div>
@@ -365,6 +370,7 @@
         }
     }
 
+    // Global hook for Android app WebView direct pattern injection
     window.loadAppPattern = function(jsonString) {
         try {
             currentData = JSON.parse(jsonString);
@@ -373,6 +379,15 @@
             renderPreview(currentData);
         } catch (e) {
             console.error("Failed to parse pattern injected from Android app:", e);
+        }
+    };
+
+    // Global hook for Android app WebView to set tempo from the app
+    window.loadAppTempo = function(bpm) {
+        const parsedBpm = parseInt(bpm);
+        if (!isNaN(parsedBpm) && parsedBpm >= 40 && parsedBpm <= 300) {
+            tempoSlider.value = parsedBpm;
+            tempoValDisplay.textContent = parsedBpm;
         }
     };
 
@@ -644,7 +659,8 @@
                 for (let i = 0; i < totalSteps; i++) {
                     const val = steps[i] || 0;
                     let cssClass = 'step-inactive';
-                    if (val === 100) cssClass = 'step-active-100';
+                    if (val === 127) cssClass = 'step-active-127';
+                    else if (val === 100) cssClass = 'step-active-100';
                     else if (val === 75) cssClass = 'step-active-75';
                     else if (val === 50) cssClass = 'step-active-50';
 
@@ -659,7 +675,7 @@
                 table.innerHTML += rowHtml;
             });
 
-            // Click cell to cycle velocity: 0 -> 50 -> 75 -> 100 -> 0
+            // Click cell to cycle velocity: 0 -> 50 -> 75 -> 100 -> 127 -> 0
             table.addEventListener('click', function(e) {
                 const cell = e.target.closest('.step-cell');
                 if (!cell) return;
@@ -673,6 +689,7 @@
                 if (currentVal === 0) newVal = 50;
                 else if (currentVal === 50) newVal = 75;
                 else if (currentVal === 75) newVal = 100;
+                else if (currentVal === 100) newVal = 127;
                 else newVal = 0;
 
                 data[pKey][inst][stepIdx] = newVal;
@@ -683,7 +700,8 @@
 
                 cell.textContent = newVal > 0 ? newVal : '-';
                 cell.className = 'step-cell ' + 
-                    (newVal === 100 ? 'step-active-100' : 
+                    (newVal === 127 ? 'step-active-127' :
+                     newVal === 100 ? 'step-active-100' : 
                      newVal === 75 ? 'step-active-75' : 
                      newVal === 50 ? 'step-active-50' : 'step-inactive') + beatClass;
             });
@@ -693,18 +711,16 @@
         });
     }
 
-    // Download / Save Handler: Intercepts for Android App (passing fileName, JSON, and active kit)
+    // Download / Save Handler: Intercepts for Android App
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
         const fileName = generateSmartFileName(currentData);
         const jsonString = JSON.stringify(currentData, null, 2);
-        const activeKit = document.getElementById('kitSelect').value; // 'acoustic' or 'percussion'
+        const activeKit = document.getElementById('kitSelect').value;
 
-        // Check if Android App interface is available
         if (window.mainActivityInterface && window.mainActivityInterface.savePatternToFile) {
             try {
-                // Pass filename, JSON content, and kit type to Android app
                 window.mainActivityInterface.savePatternToFile(fileName, jsonString, activeKit);
 
                 const toast = document.getElementById("toast");
@@ -717,7 +733,6 @@
             }
         }
 
-        // Browser Fallback
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonString);
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
@@ -759,7 +774,7 @@
         document.getElementById('modalOverlay').style.display = 'none';
     });
 
-    // Web Audio Player using real preloaded WAV samples (with synth fallbacks)
+    // Web Audio Player (Scaled for velocities up to 127)
     function playPattern(patternMap) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -785,7 +800,7 @@
     }
 
     function playSampleOrSynth(time, instrument, velocity) {
-        const volume = velocity / 100;
+        const volume = velocity / 127; // Normalized from MIDI 0-127 range
 
         if (loadedAudioBuffers[instrument]) {
             const source = audioCtx.createBufferSource();
