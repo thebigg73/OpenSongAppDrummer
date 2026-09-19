@@ -184,6 +184,23 @@
         .modal-card h3 { color: #03dac6; margin-top: 0; }
         .modal-card p { text-align: left; line-height: 1.5; font-size: 14px; }
         .modal-card code { background: #121212; padding: 2px 6px; border-radius: 4px; color: #bb86fc; }
+        
+        #toast {
+            visibility: hidden;
+            background-color: #03dac6;
+            color: #121212;
+            text-align: center;
+            border-radius: 6px;
+            padding: 14px;
+            position: fixed;
+            z-index: 101;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+        }
+        #toast.show { visibility: visible; }
     </style>
 </head>
 <body>
@@ -255,7 +272,7 @@
     </div>
 </div>
 
-<!-- Modal instructions for Android Download -->
+<!-- Modal instructions for standard web browser Download -->
 <div id="downloadModalOverlay">
     <div class="modal-card">
         <h3>📥 Pattern Downloaded Successfully!</h3>
@@ -264,6 +281,9 @@
         <button id="closeDownloadModalBtn" class="secondary" style="margin-top: 15px; width: 100%;">Got it!</button>
     </div>
 </div>
+
+<!-- Toast for Android App direct save confirmation -->
+<div id="toast">Saved directly to OpenSong/Drummer/!</div>
 
 <script>
     let currentData = null;
@@ -413,20 +433,16 @@
         }
     });
 
-    // Smart Filename generator: Checks existing repo files and increments version only if base name exists
     function generateSmartFileName(data) {
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
         const divs = data.divisions || 4;
 
         let baseCandidate = cleanName + "_" + beats + "_" + divs + ".json";
-
-        // If the base name doesn't exist yet in the repo, use it without a version suffix!
         if (!existingRepoFileNames.includes(baseCandidate)) {
             return baseCandidate;
         }
 
-        // If it exists, check for incremental versions: _v2, _v3, etc.
         let v = 2;
         while (true) {
             let versionCandidate = cleanName + "_v" + v + "_" + beats + "_" + divs + ".json";
@@ -476,7 +492,6 @@
             const tracks = data[pt.key];
             const trackNames = Object.keys(tracks);
 
-            // Build Header Row with Centered Beat Numbers spanning each beat group
             let headerHtml = '<tr><th rowspan="2">Instrument</th>';
             for (let b = 0; b < beatsPerBar; b++) {
                 const beatDivClass = b > 0 ? ' beat-divider' : '';
@@ -494,7 +509,6 @@
             headerHtml += '</tr>';
             table.innerHTML = headerHtml;
 
-            // Instrument Rows
             trackNames.forEach(instrument => {
                 if (!tracks[instrument]) {
                     tracks[instrument] = new Array(totalSteps).fill(0);
@@ -548,13 +562,38 @@
         });
     }
 
-    // Local Download Handler with Android Folder Prompt Modal
+    // Download / Save Handler: Intercepts for Android App or falls back to Browser Download
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
-        
         const fileName = generateSmartFileName(currentData);
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentData, null, 2));
+        const jsonString = JSON.stringify(currentData, null, 2);
+
+        // Check if Android App interface is available
+        if (window.mainActivityInterface && window.mainActivityInterface.getStorageAccess) {
+            try {
+                // Get URI using your provided app interface method
+                const fileUri = window.mainActivityInterface.getStorageAccess().getUriForItem("Drummer", "", fileName);
+                
+                // If your app exposes a write method or accepts the uri, write the content directly.
+                // (Alternatively, if getUriForItem returns a ContentResolver stream or path handled by your Java code):
+                if (window.mainActivityInterface.writeTextToUri) {
+                    window.mainActivityInterface.writeTextToUri(fileUri, jsonString);
+                }
+
+                // Show native direct save toast confirmation
+                const toast = document.getElementById("toast");
+                toast.textContent = "Saved to OpenSong/Drummer/" + fileName;
+                toast.className = "show";
+                setTimeout(() => { toast.className = ""; }, 4000);
+                return;
+            } catch (err) {
+                console.log("Android bridge write attempted, falling back to standard download: ", err);
+            }
+        }
+
+        // Standard Web Browser Fallback: Trigger download & show folder modal
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonString);
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
         downloadAnchor.setAttribute("download", fileName);
