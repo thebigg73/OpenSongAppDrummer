@@ -161,7 +161,6 @@
         button.submit-btn { background-color: #ff7597; color: #121212; }
         button.submit-btn:hover { background-color: #ff527b; }
         
-        /* Modal & Toast Overlays */
         #modalOverlay, #downloadModalOverlay {
             display: none;
             position: fixed;
@@ -240,10 +239,17 @@
                 <label for="authorInput"><strong>Author (Credit):</strong></label><br>
                 <input type="text" id="authorInput" placeholder="Anonymous" style="margin-top: 4px;">
             </div>
-            <div><strong>Time Signature:</strong><br><span id="timeSig" style="color:#03dac6; font-weight:bold;">-</span></div>
+            <div>
+                <label for="kitSelect"><strong>Preview Kit:</strong></label><br>
+                <select id="kitSelect" style="margin-top: 4px;">
+                    <option value="acoustic">Acoustic Kit</option>
+                    <option value="percussion">Percussion (Cajon) Kit</option>
+                </select>
+            </div>
+            <div><strong>Time Sig:</strong><br><span id="timeSig" style="color:#03dac6; font-weight:bold;">-</span></div>
             <div>
                 <label for="tempoSlider"><strong>Tempo:</strong> <span id="tempoVal">120</span> BPM</label><br>
-                <input type="range" id="tempoSlider" min="40" max="300" value="120" style="width: 140px; cursor: pointer; margin-top: 6px;">
+                <input type="range" id="tempoSlider" min="40" max="300" value="120" style="width: 120px; cursor: pointer; margin-top: 6px;">
             </div>
         </div>
 
@@ -293,23 +299,61 @@
     let audioCtx = null;
     let pendingGithubUrl = "";
     let existingRepoFileNames = [];
+    let loadedAudioBuffers = {};
 
     const REPO_OWNER = "thebigg73";
     const REPO_NAME = "OpenSongAppDrummer";
     const DB_FOLDER = "database";
+    const KIT_FOLDER = "kit"; // Folder on GitHub where you upload your .wav samples
 
-    const DEFAULT_INSTRUMENTS = {
-        "Kick": new Array(16).fill(0),
-        "Snare": new Array(16).fill(0),
-        "RimShot": new Array(16).fill(0),
-        "Stick": new Array(16).fill(0),
-        "HiHat Closed": new Array(16).fill(0),
-        "HiHat open": new Array(16).fill(0),
-        "Floor tom": new Array(16).fill(0),
-        "Mid tom": new Array(16).fill(0),
-        "High tom": new Array(16).fill(0),
-        "Crash": new Array(16).fill(0),
-        "Splash": new Array(16).fill(0)
+    // Strict professional instrument display order matching your UI grid rows
+    const INSTRUMENT_ORDER = [
+        "Kick",
+        "Snare",
+        "Rimshot",
+        "Stick",
+        "HiHat closed",
+        "HiHat open",
+        "Floor tom",
+        "Mid tom",
+        "High tom",
+        "Crash",
+        "Splash",
+        "Ride",
+        "Ride bell"
+    ];
+
+    // Map display names to Acoustic and Percussion filenames (using _48.wav format)
+    const ACOUSTIC_FILES = {
+        "Kick": "kick_48.wav",
+        "Snare": "snare_48.wav",
+        "Rimshot": "rimshot_48.wav",
+        "Stick": "stick_48.wav",
+        "HiHat closed": "hatclosed_48.wav",
+        "HiHat open": "hatopen_48.wav",
+        "Floor tom": "tomlo_48.wav",
+        "Mid tom": "tommid_48.wav",
+        "High tom": "tomhi_48.wav",
+        "Crash": "crash_48.wav",
+        "Splash": "splash_48.wav",
+        "Ride": "ride_48.wav",
+        "Ride bell": "ridebell_48.wav"
+    };
+
+    const PERCUSSION_FILES = {
+        "Kick": "cajon_kick_48.wav",
+        "Snare": "cajon_snare_48.wav",
+        "Rimshot": "cajon_rimshot_48.wav",
+        "Stick": "cajon_stick_48.wav",
+        "HiHat closed": "cajon_hatclosed_48.wav",
+        "HiHat open": "cajon_hatopen_48.wav",
+        "Floor tom": "cajon_tomlo_48.wav",
+        "Mid tom": "cajon_tommid_48.wav",
+        "High tom": "cajon_tomhi_48.wav",
+        "Crash": "cajon_crash_48.wav",
+        "Splash": "cajon_splash_48.wav",
+        "Ride": "cajon_ride_48.wav",
+        "Ride bell": "cajon_ridebell_48.wav"
     };
 
     // Global Tempo Slider Live Update
@@ -318,6 +362,37 @@
     tempoSlider.addEventListener('input', (e) => {
         tempoValDisplay.textContent = e.target.value;
     });
+
+    // Handle Kit Selection change
+    document.getElementById('kitSelect').addEventListener('change', () => {
+        loadKitSamples();
+    });
+
+    // Preload samples for the selected kit
+    async function loadKitSamples() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const kitType = document.getElementById('kitSelect').value;
+        const fileMap = kitType === 'percussion' ? PERCUSSION_FILES : ACOUSTIC_FILES;
+        loadedAudioBuffers = {};
+
+        for (let [inst, filename] of Object.entries(fileMap)) {
+            const sampleUrl = `${KIT_FOLDER}/${filename}`;
+            try {
+                const response = await fetch(sampleUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
+                audioCtx.decodeAudioData(arrayBuffer, (buffer) => {
+                    loadedAudioBuffers[inst] = buffer;
+                }, (err) => {
+                    console.error(`Error decoding audio for ${inst}:`, err);
+                });
+            } catch (e) {
+                console.warn(`Could not load sample file (${filename}) for ${inst}. Will use synth fallback if played.`, e);
+            }
+        }
+    }
 
     // Global hook for Android app WebView direct JSON pattern injection
     window.loadAppPattern = function(jsonString) {
@@ -331,9 +406,10 @@
         }
     };
 
-    // Fetch repository database files on load, parse metadata, group & sort by time signature
+    // Fetch repository database files on load
     window.addEventListener('DOMContentLoaded', () => {
-        // Also check if fallback hash/query pattern was provided if loaded via browser link
+        loadKitSamples();
+
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const queryParams = new URLSearchParams(window.location.search);
         const encodedPattern = hashParams.get('pattern') || queryParams.get('pattern');
@@ -387,7 +463,6 @@
                     }
                 }
 
-                // Group and sort patterns by time signature
                 const grouped = {};
                 parsedPatterns.forEach(p => {
                     if (!grouped[p.timeSig]) grouped[p.timeSig] = [];
@@ -476,9 +551,9 @@
 
         const createBlankTracks = () => {
             let tracks = {};
-            for (let inst in DEFAULT_INSTRUMENTS) {
+            INSTRUMENT_ORDER.forEach(inst => {
                 tracks[inst] = new Array(stepCount).fill(0);
-            }
+            });
             return tracks;
         };
 
@@ -569,7 +644,12 @@
 
             const table = document.createElement('table');
             const tracks = data[pt.key];
-            const trackNames = Object.keys(tracks);
+
+            let orderedTracks = {};
+            INSTRUMENT_ORDER.forEach(inst => {
+                orderedTracks[inst] = tracks[inst] || new Array(totalSteps).fill(0);
+            });
+            data[pt.key] = orderedTracks;
 
             let headerHtml = '<tr><th rowspan="2">Instrument</th>';
             for (let b = 0; b < beatsPerBar; b++) {
@@ -588,11 +668,8 @@
             headerHtml += '</tr>';
             table.innerHTML = headerHtml;
 
-            trackNames.forEach(instrument => {
-                if (!tracks[instrument]) {
-                    tracks[instrument] = new Array(totalSteps).fill(0);
-                }
-                const steps = tracks[instrument];
+            INSTRUMENT_ORDER.forEach(instrument => {
+                const steps = orderedTracks[instrument];
                 let rowHtml = '<tr><td class="instrument-name">' + instrument + '</td>';
                 
                 for (let i = 0; i < totalSteps; i++) {
@@ -641,7 +718,6 @@
         });
     }
 
-    // Download / Save Handler: Intercepts for Android App or falls back to Browser Download
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
@@ -680,7 +756,6 @@
         document.getElementById('downloadModalOverlay').style.display = 'none';
     });
 
-    // Submit to Database: Copy JSON & Show Guided Modal with Filename Warning
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
@@ -707,7 +782,7 @@
         document.getElementById('modalOverlay').style.display = 'none';
     });
 
-    // Web Audio Synthesizer player with dynamic global tempo
+    // Web Audio Player using real preloaded WAV samples (with synth fallbacks)
     function playPattern(patternMap) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -723,18 +798,34 @@
         for (let i = 0; i < steps; i++) {
             let time = startTime + (i * stepTime);
 
-            if (patternMap['Kick'] && patternMap['Kick'][i] > 0) {
-                playSynthDrum(time, 150, 0.05, patternMap['Kick'][i] / 100);
-            }
-            if ((patternMap['Snare'] && patternMap['Snare'][i] > 0) || (patternMap['RimShot'] && patternMap['RimShot'][i] > 0)) {
-                let vel = Math.max(patternMap['Snare']?.[i] || 0, patternMap['RimShot']?.[i] || 0);
-                playSynthNoise(time, 0.08, 0.3 * (vel / 100));
-            }
-            if ((patternMap['HiHat Closed'] && patternMap['HiHat Closed'][i] > 0) || (patternMap['HiHat open'] && patternMap['HiHat open'][i] > 0)) {
-                let isHatOpen = patternMap['HiHat open']?.[i] > 0;
-                let vel = Math.max(patternMap['HiHat Closed']?.[i] || 0, patternMap['HiHat open']?.[i] || 0);
-                playSynthNoise(time, isHatOpen ? 0.15 : 0.03, 0.15 * (vel / 100), 7000);
-            }
+            INSTRUMENT_ORDER.forEach(instrument => {
+                if (patternMap[instrument] && patternMap[instrument][i] > 0) {
+                    let velocity = patternMap[instrument][i];
+                    playSampleOrSynth(time, instrument, velocity);
+                }
+            });
+        }
+    }
+
+    function playSampleOrSynth(time, instrument, velocity) {
+        const volume = velocity / 100;
+
+        // If real WAV buffer is loaded, play it
+        if (loadedAudioBuffers[instrument]) {
+            const source = audioCtx.createBufferSource();
+            source.buffer = loadedAudioBuffers[instrument];
+
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(volume, time);
+
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            source.start(time);
+        } else {
+            // Synth fallbacks if sample hasn't loaded or isn't uploaded yet
+            if (instrument === 'Kick') playSynthDrum(time, 150, 0.05, volume);
+            else if (instrument.includes('HiHat') || instrument === 'Ride') playSynthNoise(time, 0.04, 0.15 * volume, 6000);
+            else playSynthNoise(time, 0.08, 0.3 * volume);
         }
     }
 
