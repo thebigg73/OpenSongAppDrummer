@@ -310,6 +310,7 @@
     let pendingGithubUrl = "";
     let existingRepoFileNames = [];
     let loadedAudioBuffers = {};
+    let currentActiveFileName = "";
 
     const REPO_OWNER = "thebigg73";
     const REPO_NAME = "OpenSongAppDrummer";
@@ -371,7 +372,7 @@
         }
     }
 
-    // Global hook for Android app WebView direct pattern injection
+    // Global hooks for Android app WebView direct integration
     window.loadAppPattern = function(jsonString) {
         try {
             currentData = JSON.parse(jsonString);
@@ -383,7 +384,16 @@
         }
     };
 
-    // Global hook for Android app WebView to set tempo from the app
+    window.loadAppFilename = function(filename) {
+        currentActiveFileName = filename;
+        const songNameInput = document.getElementById('songNameInput');
+        if (songNameInput && (!songNameInput.value || songNameInput.value === "Untitled")) {
+            const formattedName = filename.replace(/_/g, ' ');
+            songNameInput.value = formattedName;
+            if (currentData) currentData.name = formattedName;
+        }
+    };
+
     window.loadAppTempo = function(bpm) {
         const parsedBpm = parseInt(bpm);
         if (!isNaN(parsedBpm) && parsedBpm >= 40 && parsedBpm <= 300) {
@@ -392,7 +402,6 @@
         }
     };
 
-    // Global hook for Android app WebView to set active kit ('acoustic' or 'percussion')
     window.loadAppKit = function(kitName) {
         if (kitName === 'acoustic' || kitName === 'percussion') {
             kitSelect.value = kitName;
@@ -457,7 +466,6 @@
                 }
 
                 const grouped = {};
-                parsedPatterns.push(...[]); // placeholder
                 parsedPatterns.forEach(p => {
                     if (!grouped[p.timeSig]) grouped[p.timeSig] = [];
                     grouped[p.timeSig].push(p);
@@ -562,6 +570,7 @@
             fillVariationPattern: createBlankTracks()
         };
 
+        currentActiveFileName = "";
         document.getElementById('dbSelect').value = "";
         document.getElementById('jsonFile').value = "";
         document.getElementById('songNameInput').value = currentData.name;
@@ -582,6 +591,12 @@
     });
 
     function generateSmartFileName(data) {
+        if (currentActiveFileName && currentActiveFileName.trim() !== "") {
+            const beats = data.beats || 4;
+            const divs = data.divisions || 4;
+            return currentActiveFileName + "_" + beats + "_" + divs + ".json";
+        }
+
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
         const divs = data.divisions || 4;
@@ -609,11 +624,10 @@
         currentData.author = authorVal !== "" ? authorVal : "Anonymous";
     }
 
-    // Custom serializer to keep step arrays compact on single lines while keeping sections clean
+    // Custom serializer to keep step arrays compact on single lines while keeping structural sections clean
     function generateCompactJson(data) {
         let jsonStr = JSON.stringify(data, null, 2);
         
-        // Regex matches JSON arrays that contain numbers/commas and collapses them into a single line
         jsonStr = jsonStr.replace(/\[\s*([\d,\s]+)\s*\]/g, (match, p1) => {
             const compacted = p1.replace(/\s+/g, ' ');
             return '[' + compacted + ']';
@@ -706,7 +720,6 @@
                 table.innerHTML += rowHtml;
             });
 
-            // Click cell to cycle velocity: 0 -> 50 -> 75 -> 100 -> 127 -> 0
             table.addEventListener('click', function(e) {
                 const cell = e.target.closest('.step-cell');
                 if (!cell) return;
@@ -742,7 +755,6 @@
         });
     }
 
-    // Download / Save Handler: Intercepts for Android App
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
         syncUIStateToData();
@@ -805,7 +817,6 @@
         document.getElementById('modalOverlay').style.display = 'none';
     });
 
-    // Web Audio Player (Scaled for velocities up to 127)
     function playPattern(patternMap) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -831,7 +842,7 @@
     }
 
     function playSampleOrSynth(time, instrument, velocity) {
-        const volume = velocity / 127; // Normalized from MIDI 0-127 range
+        const volume = velocity / 127;
 
         if (loadedAudioBuffers[instrument]) {
             const source = audioCtx.createBufferSource();
