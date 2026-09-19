@@ -121,7 +121,7 @@
 <body>
 
 <div class="container">
-    <h1>OpenSong Drum Pattern Studio & Community Hub</h1>
+    <h1>OpenSongApp Drum Pattern Studio & Community Hub</h1>
     
     <div class="upload-section">
         <label for="jsonFile">Load an existing JSON pattern file: </label><br><br>
@@ -185,7 +185,7 @@
 
     function renderPreview(data) {
         document.getElementById('previewArea').style.display = 'block';
-        document.getElementById('timeSig').textContent = `${data.beats \vert{}\vert{} 4} /${data.divisions || 4}`;
+        document.getElementById('timeSig').textContent = `${data.beats || 4} / ${data.divisions || 4}`;
 
         const container = document.getElementById('patternsOutput');
         container.innerHTML = '';
@@ -283,17 +283,15 @@
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         
-        // Suggest a versioned filename to avoid direct clashes
         const suggestedFileName = generateFileName(currentData, Math.floor(Math.random() * 900) + 100);
         const jsonContent = JSON.stringify(currentData, null, 2);
 
-        // Construct pre-filled GitHub New Issue / Contribution URL
         const repoOwner = "thebigg73";
         const repoName = "OpenSongAppDrummer";
-        const title = `Community Pattern Submission: ${currentData.name || 'Untitled'}`;
-        const body = `Please add this community-submitted pattern to the database folder.\n\n**Suggested Filename:** \`${suggestedFileName}\`\n\n```json\n${jsonContent}\n````;
+        const title = "Community Pattern Submission: " + (currentData.name || 'Untitled');
+        const body = "Please add this community-submitted pattern to the database folder.\n\n**Suggested Filename:** `" + suggestedFileName + "`\n\n```json\n" + jsonContent + "\n```";
 
-        const githubUrl = `https://github.com/${repoOwner}/${repoName}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=pattern-submission`;
+        const githubUrl = "https://github.com/" + repoOwner + "/" + repoName + "/issues/new?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body) + "&labels=pattern-submission";
         
         window.open(githubUrl, '_blank');
     });
