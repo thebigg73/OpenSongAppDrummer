@@ -62,7 +62,7 @@
         }
         .meta-info {
             display: flex;
-            gap: 30px;
+            gap: 25px;
             align-items: center;
             background: #2a2a2a;
             padding: 12px 20px;
@@ -161,8 +161,8 @@
         button.submit-btn { background-color: #ff7597; color: #121212; }
         button.submit-btn:hover { background-color: #ff527b; }
         
-        /* Modal Overlay for GitHub Submission Guide */
-        #modalOverlay {
+        /* Modal & Toast Overlays */
+        #modalOverlay, #downloadModalOverlay {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -216,13 +216,17 @@
     <div id="previewArea" style="display:none;">
         <div class="meta-info">
             <div>
-                <label for="songNameInput"><strong>Song / Pattern Name:</strong></label>
-                <input type="text" id="songNameInput" style="margin-left: 8px;">
+                <label for="songNameInput"><strong>Song Name:</strong></label><br>
+                <input type="text" id="songNameInput" style="margin-top: 4px;">
             </div>
-            <div><strong>Time Signature:</strong> <span id="timeSig">-</span></div>
+            <div>
+                <label for="authorInput"><strong>Author (Credit):</strong></label><br>
+                <input type="text" id="authorInput" placeholder="Anonymous" style="margin-top: 4px;">
+            </div>
+            <div><strong>Time Signature:</strong><br><span id="timeSig" style="color:#03dac6; font-weight:bold;">-</span></div>
             <div>
                 <label for="tempoSlider"><strong>Tempo:</strong> <span id="tempoVal">120</span> BPM</label><br>
-                <input type="range" id="tempoSlider" min="40" max="300" value="120" style="width: 150px; cursor: pointer;">
+                <input type="range" id="tempoSlider" min="40" max="300" value="120" style="width: 140px; cursor: pointer; margin-top: 6px;">
             </div>
         </div>
 
@@ -251,10 +255,21 @@
     </div>
 </div>
 
+<!-- Modal instructions for Android Download -->
+<div id="downloadModalOverlay">
+    <div class="modal-card">
+        <h3>📥 Pattern Downloaded Successfully!</h3>
+        <p>To use this pattern in your Android app, please copy the downloaded JSON file to your device's folder:</p>
+        <p style="text-align: center;"><code style="font-size: 15px;">OpenSong/Drummer/</code></p>
+        <button id="closeDownloadModalBtn" class="secondary" style="margin-top: 15px; width: 100%;">Got it!</button>
+    </div>
+</div>
+
 <script>
     let currentData = null;
     let audioCtx = null;
     let pendingGithubUrl = "";
+    let existingRepoFileNames = [];
 
     const REPO_OWNER = "thebigg73";
     const REPO_NAME = "OpenSongAppDrummer";
@@ -290,8 +305,10 @@
             })
             .then(files => {
                 const select = document.getElementById('dbSelect');
+                existingRepoFileNames = [];
                 files.forEach(file => {
                     if (file.name.endsWith('.json')) {
+                        existingRepoFileNames.push(file.name);
                         const option = document.createElement('option');
                         option.value = file.download_url;
                         option.textContent = file.name.replace('.json', '').replace(/_/g, ' ');
@@ -316,6 +333,7 @@
             .then(data => {
                 currentData = data;
                 document.getElementById('songNameInput').value = currentData.name || "Untitled";
+                document.getElementById('authorInput').value = currentData.author || "";
                 renderPreview(currentData);
             })
             .catch(err => {
@@ -335,6 +353,7 @@
             try {
                 currentData = JSON.parse(e.target.result);
                 document.getElementById('songNameInput').value = currentData.name || "Untitled";
+                document.getElementById('authorInput').value = currentData.author || "";
                 renderPreview(currentData);
             } catch (err) {
                 alert("Invalid JSON file format!");
@@ -366,6 +385,7 @@
 
         currentData = {
             name: songName,
+            author: "Anonymous",
             beats: beats,
             divisions: divisions,
             mainPattern: createBlankTracks(),
@@ -377,6 +397,7 @@
         document.getElementById('dbSelect').value = "";
         document.getElementById('jsonFile').value = "";
         document.getElementById('songNameInput').value = currentData.name;
+        document.getElementById('authorInput').value = "";
         renderPreview(currentData);
     });
 
@@ -386,17 +407,40 @@
         }
     });
 
-    function generateFileName(data, versionNum = 1) {
+    document.getElementById('authorInput').addEventListener('input', function(e) {
+        if (currentData) {
+            currentData.author = e.target.value.trim() !== "" ? e.target.value.trim() : "Anonymous";
+        }
+    });
+
+    // Smart Filename generator: Checks existing repo files and increments version only if base name exists
+    function generateSmartFileName(data) {
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
         const divs = data.divisions || 4;
-        const verSuffix = versionNum > 1 ? "_v" + versionNum : "";
-        return cleanName + verSuffix + "_" + beats + "_" + divs + ".json";
+
+        let baseCandidate = cleanName + "_" + beats + "_" + divs + ".json";
+
+        // If the base name doesn't exist yet in the repo, use it without a version suffix!
+        if (!existingRepoFileNames.includes(baseCandidate)) {
+            return baseCandidate;
+        }
+
+        // If it exists, check for incremental versions: _v2, _v3, etc.
+        let v = 2;
+        while (true) {
+            let versionCandidate = cleanName + "_v" + v + "_" + beats + "_" + divs + ".json";
+            if (!existingRepoFileNames.includes(versionCandidate)) {
+                return versionCandidate;
+            }
+            v++;
+        }
     }
 
     function renderPreview(data) {
         document.getElementById('previewArea').style.display = 'block';
         document.getElementById('timeSig').textContent = (data.beats || 4) + " / " + (data.divisions || 4);
+        document.getElementById('authorInput').value = data.author && data.author !== "Anonymous" ? data.author : "";
 
         const container = document.getElementById('patternsOutput');
         container.innerHTML = '';
@@ -432,7 +476,7 @@
             const tracks = data[pt.key];
             const trackNames = Object.keys(tracks);
 
-            // Build Header Row with Centered Beat Numbers spanning each beat group (e.g. colspan="4")
+            // Build Header Row with Centered Beat Numbers spanning each beat group
             let headerHtml = '<tr><th rowspan="2">Instrument</th>';
             for (let b = 0; b < beatsPerBar; b++) {
                 const beatDivClass = b > 0 ? ' beat-divider' : '';
@@ -440,7 +484,6 @@
             }
             headerHtml += '</tr>';
 
-            // Sub-header row (empty spacer or sub-ticks if needed, keeping table grid aligned)
             headerHtml += '<tr>';
             for (let b = 0; b < beatsPerBar; b++) {
                 for (let d = 0; d < divsPerBeat; d++) {
@@ -505,10 +548,12 @@
         });
     }
 
-    // Local Download Handler
+    // Local Download Handler with Android Folder Prompt Modal
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
-        const fileName = generateFileName(currentData, 1);
+        currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
+        
+        const fileName = generateSmartFileName(currentData);
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentData, null, 2));
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
@@ -516,14 +561,20 @@
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
+
+        document.getElementById('downloadModalOverlay').style.display = 'flex';
+    });
+
+    document.getElementById('closeDownloadModalBtn').addEventListener('click', () => {
+        document.getElementById('downloadModalOverlay').style.display = 'none';
     });
 
     // Submit to Database: Copy JSON & Show Guided Modal
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
+        currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
         
-        const randVer = Math.floor(Math.random() * 900) + 100;
-        const fileName = generateFileName(currentData, randVer);
+        const fileName = generateSmartFileName(currentData);
         const jsonContent = JSON.stringify(currentData, null, 2);
         
         pendingGithubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/new/main?filename=" + encodeURIComponent(DB_FOLDER + "/" + fileName);
