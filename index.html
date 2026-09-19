@@ -82,15 +82,17 @@
             border: 1px solid #333;
             padding: 6px;
             text-align: center;
-            font-size: 12px;
+            font-size: 11px;
         }
         th { background: #333; color: #fff; }
+        th.bar-divider { border-left: 2px solid #bb86fc; }
         td.instrument-name {
             text-align: left;
             font-weight: bold;
             color: #03dac6;
             background: #222;
             white-space: nowrap;
+            font-size: 12px;
         }
         td.step-cell {
             cursor: pointer;
@@ -100,6 +102,7 @@
         td.step-cell:hover {
             background-color: #444;
         }
+        td.bar-divider { border-left: 2px solid #bb86fc; }
         .step-active-100 {
             background-color: #bb86fc;
             color: #121212;
@@ -144,22 +147,17 @@
             background-color: #03dac6;
             color: #121212;
             text-align: center;
-            border-radius: 4px;
-            padding: 10px;
+            border-radius: 6px;
+            padding: 14px;
             position: fixed;
-            z-index: 1;
+            z-index: 10;
             left: 50%;
             bottom: 30px;
             transform: translateX(-50%);
             font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.7);
         }
-        #toast.show {
-            visibility: visible;
-            animation: fadein 0.5s, fadeout 0.5s 2.5s;
-        }
-        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        #toast.show { visibility: visible; }
     </style>
 </head>
 <body>
@@ -208,7 +206,7 @@
     </div>
 </div>
 
-<div id="toast">Opening GitHub File Proposal page...</div>
+<div id="toast">Copied to clipboard! Opening GitHub repository...</div>
 
 <script>
     let currentData = null;
@@ -218,7 +216,6 @@
     const REPO_NAME = "OpenSongAppDrummer";
     const DB_FOLDER = "database";
 
-    // Default instrument template layout for new patterns
     const DEFAULT_INSTRUMENTS = {
         "Kick": new Array(16).fill(0),
         "Snare": new Array(16).fill(0),
@@ -227,7 +224,7 @@
         "RimShot": new Array(16).fill(0)
     };
 
-    // Fetch list of files from GitHub repository /database folder on load
+    // Fetch repository database files on load
     window.addEventListener('DOMContentLoaded', () => {
         fetch("https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + DB_FOLDER)
             .then(response => {
@@ -252,11 +249,10 @@
             });
     });
 
-    // Handle selecting a pattern from the database dropdown
     document.getElementById('dbSelect').addEventListener('change', function(e) {
         const url = e.target.value;
         if (!url) return;
-        document.getElementById('jsonFile').value = ""; // clear file picker
+        document.getElementById('jsonFile').value = "";
 
         fetch(url)
             .then(res => res.json())
@@ -271,12 +267,11 @@
             });
     });
 
-    // Handle local file upload
     document.getElementById('jsonFile').addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        document.getElementById('dbSelect').value = ""; // clear dropdown
+        document.getElementById('dbSelect').value = "";
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -292,7 +287,6 @@
         reader.readAsText(file);
     });
 
-    // Handle creating a new blank pattern
     document.getElementById('createNewBtn').addEventListener('click', () => {
         const songName = prompt("Enter Song / Pattern Name:", "New Song");
         if (!songName) return;
@@ -305,7 +299,6 @@
 
         const stepCount = beats * divisions;
 
-        // Build blank template with correct step length
         const createBlankTracks = () => {
             let tracks = {};
             for (let inst in DEFAULT_INSTRUMENTS) {
@@ -336,7 +329,7 @@
         }
     });
 
-    // Generates filename: songname_v2_beats_divisions.json
+    // Filename structure: songname_v[rand]_[beats]_[divisions].json
     function generateFileName(data, versionNum = 1) {
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
@@ -359,6 +352,12 @@
             { key: 'fillVariationPattern', title: 'Fill (Variation)' }
         ];
 
+        const beatsPerBar = data.beats || 4;
+        const divsPerBeat = data.divisions || 4;
+        const stepsPerBar = beatsPerBar * divsPerBeat;
+        const totalSteps = data.mainPattern[Object.keys(data.mainPattern)[0]].length;
+        const totalBars = Math.ceil(totalSteps / stepsPerBar);
+
         patternTypes.forEach(pt => {
             if (!data[pt.key]) return;
 
@@ -378,26 +377,34 @@
             const table = document.createElement('table');
             const tracks = data[pt.key];
             const trackNames = Object.keys(tracks);
-            const stepCount = tracks[trackNames[0]] ? tracks[trackNames[0]].length : 16;
 
+            // Build Header Row with Bar Indicators
             let headerHtml = '<tr><th>Instrument</th>';
-            for (let i = 0; i < stepCount; i++) {
-                headerHtml += '<th>' + (i + 1) + '</th>';
+            for (let i = 0; i < totalSteps; i++) {
+                const barNum = Math.floor(i / stepsPerBar) + 1;
+                const stepInBar = (i % stepsPerBar) + 1;
+                const isStartOfBar = (i % stepsPerBar === 0);
+                const barClass = isStartOfBar && i > 0 ? ' bar-divider' : '';
+                headerHtml += '<th class="' + barClass + '">B' + barNum + '.' + stepInBar + '</th>';
             }
             headerHtml += '</tr>';
             table.innerHTML = headerHtml;
 
+            // Instrument Rows
             trackNames.forEach(instrument => {
                 const steps = tracks[instrument];
                 let rowHtml = '<tr><td class="instrument-name">' + instrument + '</td>';
                 
-                for (let i = 0; i < stepCount; i++) {
+                for (let i = 0; i < totalSteps; i++) {
                     const val = steps[i] || 0;
                     let cssClass = 'step-inactive';
                     if (val === 100) cssClass = 'step-active-100';
                     else if (val > 0) cssClass = 'step-active-75';
 
-                    rowHtml += '<td class="step-cell ' + cssClass + '" data-pattern="' + pt.key + '" data-inst="' + instrument + '" data-step="' + i + '">' + (val > 0 ? val : '-') + '</td>';
+                    const isStartOfBar = (i % stepsPerBar === 0);
+                    const barClass = isStartOfBar && i > 0 ? ' bar-divider' : '';
+
+                    rowHtml += '<td class="step-cell ' + cssClass + barClass + '" data-pattern="' + pt.key + '" data-inst="' + instrument + '" data-step="' + i + '">' + (val > 0 ? val : '-') + '</td>';
                 }
                 rowHtml += '</tr>';
                 table.innerHTML += rowHtml;
@@ -420,7 +427,7 @@
                 data[pKey][inst][stepIdx] = newVal;
 
                 cell.textContent = newVal > 0 ? newVal : '-';
-                cell.className = 'step-cell ' + (newVal === 100 ? 'step-active-100' : newVal === 75 ? 'step-active-75' : 'step-inactive');
+                cell.className = 'step-cell ' + (newVal === 100 ? 'step-active-100' : newVal === 75 ? 'step-active-75' : 'step-inactive') + (stepIdx > 0 && stepIdx % stepsPerBar === 0 ? ' bar-divider' : '');
             });
 
             sectionDiv.appendChild(table);
@@ -441,27 +448,33 @@
         downloadAnchor.remove();
     });
 
-    // Submit to Database (Opens GitHub New File Editor URL directly pre-filled)
+    // Submit to Database via Clipboard & GitHub Navigation
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         
-        const fileName = generateFileName(currentData, Math.floor(Math.random() * 900) + 100);
+        const randVer = Math.floor(Math.random() * 900) + 100;
+        const fileName = generateFileName(currentData, randVer);
         const jsonContent = JSON.stringify(currentData, null, 2);
         
-        showToast();
-
-        setTimeout(() => {
-            const targetPath = DB_FOLDER + "/" + fileName;
-            const githubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/new/main?filename=" + encodeURIComponent(targetPath) + "&value=" + encodeURIComponent(jsonContent);
+        // Copy JSON payload directly to clipboard
+        navigator.clipboard.writeText(jsonContent).then(() => {
+            showToast("JSON copied to clipboard! Creating file '" + fileName + "' on GitHub...");
             
-            window.open(githubUrl, '_blank');
-        }, 600);
+            setTimeout(() => {
+                const githubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/new/main?filename=" + encodeURIComponent(DB_FOLDER + "/" + fileName);
+                window.open(githubUrl, '_blank');
+            }, 1200);
+        }).catch(err => {
+            alert("Clipboard permission blocked. Please download the file and upload it manually.");
+            console.error(err);
+        });
     });
 
-    function showToast() {
+    function showToast(msg) {
         const toast = document.getElementById("toast");
+        toast.textContent = msg;
         toast.className = "show";
-        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        setTimeout(() => { toast.className = ""; }, 4000);
     }
 
     // Web Audio Synthesizer player
