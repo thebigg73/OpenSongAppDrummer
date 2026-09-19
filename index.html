@@ -178,11 +178,11 @@
             border-radius: 10px;
             max-width: 500px;
             width: 90%;
-            text-align: center;
+            text-align: left;
             box-shadow: 0 5px 25px rgba(0,0,0,0.8);
         }
-        .modal-card h3 { color: #03dac6; margin-top: 0; }
-        .modal-card p { text-align: left; line-height: 1.5; font-size: 14px; }
+        .modal-card h3 { color: #03dac6; margin-top: 0; text-align: center; }
+        .modal-card p { line-height: 1.5; font-size: 14px; }
         .modal-card code { background: #121212; padding: 2px 6px; border-radius: 4px; color: #bb86fc; }
         
         #toast {
@@ -257,18 +257,21 @@
     </div>
 </div>
 
-<!-- Modal instructions for GitHub Proposal -->
+<!-- Modal instructions for GitHub Proposal with Filename Lock Notice -->
 <div id="modalOverlay">
     <div class="modal-card">
         <h3>🚀 Ready to Propose Pattern!</h3>
-        <p>Your pattern JSON has been <strong>copied to your clipboard</strong>. GitHub requires a manual paste for security reasons.</p>
-        <p><strong>Next steps:</strong><br>
-        1. Click the button below to open GitHub.<br>
+        <p>Your pattern JSON content has been <strong>copied to your clipboard</strong>.</p>
+        <p style="background: #2a2a2a; border-left: 4px solid #ff7597; padding: 10px; border-radius: 4px; font-size: 13px;">
+            ⚠️ <strong>Important Note:</strong> Please <strong>do not change the automatically generated filename</strong> in GitHub. OpenSongApp relies on this exact naming format to parse pattern structures correctly!
+        </p>
+        <p><strong>Next steps on GitHub:</strong><br>
+        1. Click the button below.<br>
         2. Click inside the code editor box.<br>
         3. Press <code>Ctrl + V</code> (or <code>Cmd + V</code>) to paste your pattern.<br>
         4. Scroll down and click <strong>"Propose changes"</strong>.</p>
-        <button id="proceedGithubBtn" class="secondary" style="margin-top: 15px; width: 100%;">Open GitHub Editor ➔</button>
-        <br><button id="closeModalBtn" style="background: transparent; color: #888; margin-top: 10px; border: none; cursor: pointer;">Cancel</button>
+        <button id="proceedGithubBtn" class="secondary" style="margin-top: 10px; width: 100%;">Open GitHub Editor ➔</button>
+        <br><button id="closeModalBtn" style="background: transparent; color: #888; margin-top: 10px; border: none; cursor: pointer; width: 100%; text-align: center;">Cancel</button>
     </div>
 </div>
 
@@ -316,24 +319,75 @@
         tempoValDisplay.textContent = e.target.value;
     });
 
-    // Fetch repository database files on load
+    // Fetch repository database files on load, parse metadata, group & sort by time signature
     window.addEventListener('DOMContentLoaded', () => {
         fetch("https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + DB_FOLDER)
             .then(response => {
                 if (!response.ok) throw new Error("Database folder not found yet.");
                 return response.json();
             })
-            .then(files => {
-                const select = document.getElementById('dbSelect');
+            .then(async files => {
                 existingRepoFileNames = [];
-                files.forEach(file => {
+                let parsedPatterns = [];
+
+                for (let file of files) {
                     if (file.name.endsWith('.json')) {
                         existingRepoFileNames.push(file.name);
-                        const option = document.createElement('option');
-                        option.value = file.download_url;
-                        option.textContent = file.name.replace('.json', '').replace(/_/g, ' ');
-                        select.appendChild(option);
+                        try {
+                            const res = await fetch(file.download_url);
+                            const data = await res.json();
+                            const beats = data.beats || 4;
+                            const divs = data.divisions || 4;
+                            const timeSigStr = beats + "/" + divs;
+                            const songTitle = data.name || file.name.replace('.json', '');
+                            const authorStr = data.author && data.author !== "Anonymous" ? " (by " + data.author + ")" : "";
+                            
+                            parsedPatterns.push({
+                                downloadUrl: file.download_url,
+                                timeSig: timeSigStr,
+                                displayName: songTitle + " (" + timeSigStr + ")" + authorStr,
+                                rawData: data
+                            });
+                        } catch (e) {
+                            // Fallback if individual json fetch fails
+                            parsedPatterns.push({
+                                downloadUrl: file.download_url,
+                                timeSig: "4/4",
+                                displayName: file.name.replace('.json', ''),
+                                rawData: null
+                            });
+                        }
                     }
+                }
+
+                // Group and sort patterns by time signature
+                const grouped = {};
+                parsedPatterns.forEach(p => {
+                    if (!grouped[p.timeSig]) grouped[p.timeSig] = [];
+                    grouped[p.timeSig].push(p);
+                });
+
+                const select = document.getElementById('dbSelect');
+                select.innerHTML = '<option value="">-- Select Pattern --</option>';
+
+                // Sort time signature keys (e.g., 4/4 first, then 3/4, etc.)
+                const sortedTimeSigs = Object.keys(grouped).sort();
+
+                sortedTimeSigs.forEach(ts => {
+                    const groupOptgroup = document.createElement('optgroup');
+                    groupOptgroup.label = "Time Signature: " + ts;
+                    
+                    // Sort items alphabetically inside each time signature group
+                    grouped[ts].sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+                    grouped[ts].forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.downloadUrl;
+                        option.textContent = item.displayName;
+                        groupOptgroup.appendChild(option);
+                    });
+
+                    select.appendChild(groupOptgroup);
                 });
             })
             .catch(err => {
@@ -569,19 +623,13 @@
         const fileName = generateSmartFileName(currentData);
         const jsonString = JSON.stringify(currentData, null, 2);
 
-        // Check if Android App interface is available
         if (window.mainActivityInterface && window.mainActivityInterface.getStorageAccess) {
             try {
-                // Get URI using your provided app interface method
                 const fileUri = window.mainActivityInterface.getStorageAccess().getUriForItem("Drummer", "", fileName);
-                
-                // If your app exposes a write method or accepts the uri, write the content directly.
-                // (Alternatively, if getUriForItem returns a ContentResolver stream or path handled by your Java code):
                 if (window.mainActivityInterface.writeTextToUri) {
                     window.mainActivityInterface.writeTextToUri(fileUri, jsonString);
                 }
 
-                // Show native direct save toast confirmation
                 const toast = document.getElementById("toast");
                 toast.textContent = "Saved to OpenSong/Drummer/" + fileName;
                 toast.className = "show";
@@ -592,7 +640,6 @@
             }
         }
 
-        // Standard Web Browser Fallback: Trigger download & show folder modal
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonString);
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
@@ -608,7 +655,7 @@
         document.getElementById('downloadModalOverlay').style.display = 'none';
     });
 
-    // Submit to Database: Copy JSON & Show Guided Modal
+    // Submit to Database: Copy JSON & Show Guided Modal with Filename Warning
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         currentData.author = document.getElementById('authorInput').value.trim() || "Anonymous";
