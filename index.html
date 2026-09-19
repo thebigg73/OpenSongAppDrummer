@@ -21,15 +21,36 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         h1, h2 { color: #bb86fc; }
-        .upload-section {
+        .top-sections {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .top-sections { grid-template-columns: 1fr; }
+        }
+        .section-box {
             border: 2px dashed #333;
             padding: 20px;
             text-align: center;
             border-radius: 8px;
-            margin-bottom: 20px;
             background: #252525;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
-        input[type="file"], input[type="text"] { color: #fff; background: #2a2a2a; border: 1px solid #444; padding: 6px; border-radius: 4px; }
+        input[type="file"], input[type="text"], select { 
+            color: #fff; 
+            background: #2a2a2a; 
+            border: 1px solid #444; 
+            padding: 8px; 
+            border-radius: 4px;
+            width: 100%;
+            max-width: 300px;
+            margin-top: 8px;
+        }
         .meta-info {
             display: flex;
             gap: 20px;
@@ -116,6 +137,28 @@
         button.secondary:hover { background-color: #018786; }
         button.submit-btn { background-color: #ff7597; color: #121212; }
         button.submit-btn:hover { background-color: #ff527b; }
+        
+        #toast {
+            visibility: hidden;
+            background-color: #03dac6;
+            color: #121212;
+            text-align: center;
+            border-radius: 4px;
+            padding: 10px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        #toast.show {
+            visibility: visible;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
 <body>
@@ -123,9 +166,20 @@
 <div class="container">
     <h1>OpenSongApp Drum Pattern Studio & Community Hub</h1>
     
-    <div class="upload-section">
-        <label for="jsonFile">Load an existing JSON pattern file: </label><br><br>
-        <input type="file" id="jsonFile" accept=".json">
+    <div class="top-sections">
+        <!-- Option 1: Load from Community Database -->
+        <div class="section-box">
+            <label for="dbSelect"><strong>📁 Load from Community Database:</strong></label>
+            <select id="dbSelect">
+                <option value="">-- Select a Community Pattern --</option>
+            </select>
+        </div>
+
+        <!-- Option 2: Upload local file -->
+        <div class="section-box">
+            <label for="jsonFile"><strong>💻 Or Upload JSON File:</strong></label>
+            <input type="file" id="jsonFile" accept=".json">
+        </div>
     </div>
 
     <div id="previewArea" style="display:none;">
@@ -147,13 +201,67 @@
     </div>
 </div>
 
+<div id="toast">JSON copied to clipboard! Paste it into the GitHub issue.</div>
+
 <script>
     let currentData = null;
     let audioCtx = null;
 
+    const REPO_OWNER = "thebigg73";
+    const REPO_NAME = "OpenSongAppDrummer";
+    const DB_FOLDER = "database";
+
+    // Fetch list of files from GitHub repository /database folder on load
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DB_FOLDER}`)
+            .then(response => {
+                if (!response.ok) throw new Error("Database folder not found yet.");
+                return response.json();
+            })
+            .then(files => {
+                const select = document.getElementById('dbSelect');
+                files.forEach(file => {
+                    if (file.name.endsWith('.json')) {
+                        const option = document.createElement('option');
+                        option.value = file.download_url;
+                        // Format clean display name from filename
+                        option.textContent = file.name.replace('.json', '').replace(/_/g, ' ');
+                        select.appendChild(option);
+                    }
+                });
+            })
+            .catch(err => {
+                console.log("Community database notice: ", err);
+                const select = document.getElementById('dbSelect');
+                select.innerHTML = '<option value="">(No patterns in /database/ folder yet)</option>';
+            });
+    });
+
+    // Handle selecting a pattern from the database dropdown
+    document.getElementById('dbSelect').addEventListener('change', function(e) {
+        const url = e.target.value;
+        if (!url) return;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                currentData = data;
+                document.getElementById('songNameInput').value = currentData.name || "Untitled";
+                renderPreview(currentData);
+            })
+            .catch(err => {
+                alert("Failed to load pattern from database.");
+                console.error(err);
+            });
+    });
+
+    // Handle local file upload
     document.getElementById('jsonFile').addEventListener('change', function(event) {
         const file = event.target.files[0];
         if (!file) return;
+
+        // Reset dropdown selection
+        document.getElementById('dbSelect').value = "";
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -185,7 +293,7 @@
 
     function renderPreview(data) {
         document.getElementById('previewArea').style.display = 'block';
-        document.getElementById('timeSig').textContent = `${data.beats || 4} / ${data.divisions || 4}`;
+        document.getElementById('timeSig').textContent = `${data.beats \vert{}\vert{} 4} /${data.divisions || 4}`;
 
         const container = document.getElementById('patternsOutput');
         container.innerHTML = '';
@@ -279,22 +387,34 @@
         downloadAnchor.remove();
     });
 
-    // Submit to Database (GitHub Issue / Contribution template automation)
+    // Submit to Database (Copies JSON to clipboard and opens clean GitHub issue template)
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         
         const suggestedFileName = generateFileName(currentData, Math.floor(Math.random() * 900) + 100);
         const jsonContent = JSON.stringify(currentData, null, 2);
+        const clipboardText = `Suggested Filename: \`${suggestedFileName}\`\n\n\`\`\`json\n${jsonContent}\n\`\`\``;
 
-        const repoOwner = "thebigg73";
-        const repoName = "OpenSongAppDrummer";
-        const title = "Community Pattern Submission: " + (currentData.name || 'Untitled');
-        const body = "Please add this community-submitted pattern to the database folder.\n\n**Suggested Filename:** `" + suggestedFileName + "`\n\n```json\n" + jsonContent + "\n```";
-
-        const githubUrl = "https://github.com/" + repoOwner + "/" + repoName + "/issues/new?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body) + "&labels=pattern-submission";
-        
-        window.open(githubUrl, '_blank');
+        navigator.clipboard.writeText(clipboardText).then(() => {
+            showToast();
+            
+            const title = "Community Pattern Submission: " + (currentData.name || 'Untitled');
+            const githubUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/issues/new?title=` + encodeURIComponent(title) + "&labels=pattern-submission";
+            
+            setTimeout(() => {
+                window.open(githubUrl, '_blank');
+            }, 800);
+        }).catch(err => {
+            alert("Failed to copy JSON to clipboard. Please check browser permissions.");
+            console.error(err);
+        });
     });
+
+    function showToast() {
+        const toast = document.getElementById("toast");
+        toast.className = "show";
+        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+    }
 
     // Web Audio Synthesizer player
     function playPattern(patternMap) {
