@@ -321,20 +321,19 @@
 
     // Fetch repository database files on load, parse metadata, group & sort by time signature
     window.addEventListener('DOMContentLoaded', () => {
-        // Check if an initial pattern was passed via URL hash/query from the Android app
+        // Check if a pattern was passed via URL hash
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const queryParams = new URLSearchParams(window.location.search);
-        const encodedPattern = hashParams.get('pattern') || queryParams.get('pattern');
-
+        const encodedPattern = hashParams.get('pattern');
+    
         if (encodedPattern) {
             try {
-                const decodedJson = JSON.parse(atob(encodedPattern));
+                const decodedJson = JSON.parse(atob(encodedPattern.replace(/-/g, '+').replace(/_/g, '/')));
                 currentData = decodedJson;
                 document.getElementById('songNameInput').value = currentData.name || "Untitled";
                 document.getElementById('authorInput').value = currentData.author || "";
                 renderPreview(currentData);
             } catch (e) {
-                console.error("Failed to parse pattern passed from app:", e);
+                console.error("Failed to decode pattern from app:", e);
             }
         }
         fetch("https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + DB_FOLDER)
