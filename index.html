@@ -341,7 +341,8 @@
         tempoValDisplay.textContent = e.target.value;
     });
 
-    document.getElementById('kitSelect').addEventListener('change', () => {
+    const kitSelect = document.getElementById('kitSelect');
+    kitSelect.addEventListener('change', () => {
         loadKitSamples();
     });
 
@@ -349,7 +350,7 @@
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
 
-        const kitType = document.getElementById('kitSelect').value;
+        const kitType = kitSelect.value;
         const fileMap = kitType === 'percussion' ? PERCUSSION_FILES : ACOUSTIC_FILES;
         loadedAudioBuffers = {};
 
@@ -388,6 +389,14 @@
         if (!isNaN(parsedBpm) && parsedBpm >= 40 && parsedBpm <= 300) {
             tempoSlider.value = parsedBpm;
             tempoValDisplay.textContent = parsedBpm;
+        }
+    };
+
+    // Global hook for Android app WebView to set active kit ('acoustic' or 'percussion')
+    window.loadAppKit = function(kitName) {
+        if (kitName === 'acoustic' || kitName === 'percussion') {
+            kitSelect.value = kitName;
+            loadKitSamples();
         }
     };
 
