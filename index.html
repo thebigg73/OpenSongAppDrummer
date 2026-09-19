@@ -319,12 +319,24 @@
         tempoValDisplay.textContent = e.target.value;
     });
 
+    // Global hook for Android app WebView direct JSON pattern injection
+    window.loadAppPattern = function(jsonString) {
+        try {
+            currentData = JSON.parse(jsonString);
+            document.getElementById('songNameInput').value = currentData.name || "Untitled";
+            document.getElementById('authorInput').value = currentData.author || "";
+            renderPreview(currentData);
+        } catch (e) {
+            console.error("Failed to parse pattern injected from Android app:", e);
+        }
+    };
+
     // Fetch repository database files on load, parse metadata, group & sort by time signature
     window.addEventListener('DOMContentLoaded', () => {
-        // Check if a pattern was passed via URL hash
+        // Also check if fallback hash/query pattern was provided if loaded via browser link
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const encodedPattern = hashParams.get('pattern');
-    
+        const queryParams = new URLSearchParams(window.location.search);
+        const encodedPattern = hashParams.get('pattern') || queryParams.get('pattern');
         if (encodedPattern) {
             try {
                 const decodedJson = JSON.parse(atob(encodedPattern.replace(/-/g, '+').replace(/_/g, '/')));
@@ -333,9 +345,10 @@
                 document.getElementById('authorInput').value = currentData.author || "";
                 renderPreview(currentData);
             } catch (e) {
-                console.error("Failed to decode pattern from app:", e);
+                console.error("Failed to decode URL pattern hash:", e);
             }
         }
+
         fetch("https://api.github.com/repos/" + REPO_OWNER + "/" + REPO_NAME + "/contents/" + DB_FOLDER)
             .then(response => {
                 if (!response.ok) throw new Error("Database folder not found yet.");
@@ -364,7 +377,6 @@
                                 rawData: data
                             });
                         } catch (e) {
-                            // Fallback if individual json fetch fails
                             parsedPatterns.push({
                                 downloadUrl: file.download_url,
                                 timeSig: "4/4",
@@ -385,14 +397,12 @@
                 const select = document.getElementById('dbSelect');
                 select.innerHTML = '<option value="">-- Select Pattern --</option>';
 
-                // Sort time signature keys (e.g., 4/4 first, then 3/4, etc.)
                 const sortedTimeSigs = Object.keys(grouped).sort();
 
                 sortedTimeSigs.forEach(ts => {
                     const groupOptgroup = document.createElement('optgroup');
                     groupOptgroup.label = "Time Signature: " + ts;
                     
-                    // Sort items alphabetically inside each time signature group
                     grouped[ts].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
                     grouped[ts].forEach(item => {
