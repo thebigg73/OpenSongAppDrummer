@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenSong Drum Pattern Previewer</title>
+    <title>OpenSong Drum Pattern Studio & Community Hub</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -13,7 +13,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
             background: #1e1e1e;
             padding: 24px;
@@ -29,10 +29,11 @@
             margin-bottom: 20px;
             background: #252525;
         }
-        input[type="file"] { color: #fff; }
+        input[type="file"], input[type="text"] { color: #fff; background: #2a2a2a; border: 1px solid #444; padding: 6px; border-radius: 4px; }
         .meta-info {
             display: flex;
             gap: 20px;
+            align-items: center;
             background: #2a2a2a;
             padding: 12px 20px;
             border-radius: 6px;
@@ -45,10 +46,15 @@
             border-radius: 8px;
             overflow-x: auto;
         }
+        .pattern-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
         }
         th, td {
             border: 1px solid #333;
@@ -62,49 +68,79 @@
             font-weight: bold;
             color: #03dac6;
             background: #222;
+            white-space: nowrap;
         }
-        .step-active {
+        td.step-cell {
+            cursor: pointer;
+            transition: background 0.1s;
+            user-select: none;
+        }
+        td.step-cell:hover {
+            background-color: #444;
+        }
+        .step-active-100 {
             background-color: #bb86fc;
             color: #121212;
+            font-weight: bold;
+        }
+        .step-active-75 {
+            background-color: #7c4dff;
+            color: #fff;
             font-weight: bold;
         }
         .step-inactive {
             background-color: #1a1a1a;
             color: #555;
         }
-        .controls {
+        .action-bar {
+            display: flex;
+            gap: 12px;
             margin-bottom: 20px;
+            background: #252525;
+            padding: 16px;
+            border-radius: 8px;
+            align-items: center;
+            flex-wrap: wrap;
         }
         button {
             background-color: #bb86fc;
             color: #121212;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 18px;
             font-weight: bold;
             border-radius: 4px;
             cursor: pointer;
         }
         button:hover { background-color: #9965f4; }
+        button.secondary { background-color: #03dac6; }
+        button.secondary:hover { background-color: #018786; }
+        button.submit-btn { background-color: #ff7597; color: #121212; }
+        button.submit-btn:hover { background-color: #ff527b; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>OpenSong Drum Pattern Previewer</h1>
+    <h1>OpenSong Drum Pattern Studio & Community Hub</h1>
     
     <div class="upload-section">
-        <label for="jsonFile">Upload or select a JSON drum pattern file: </label><br><br>
+        <label for="jsonFile">Load an existing JSON pattern file: </label><br><br>
         <input type="file" id="jsonFile" accept=".json">
     </div>
 
     <div id="previewArea" style="display:none;">
         <div class="meta-info">
-            <div><strong>Song Name:</strong> <span id="songName">-</span></div>
+            <div>
+                <label for="songNameInput"><strong>Song / Pattern Name:</strong></label>
+                <input type="text" id="songNameInput" style="margin-left: 8px;">
+            </div>
             <div><strong>Time Signature:</strong> <span id="timeSig">-</span></div>
         </div>
 
-        <div class="controls">
-            <button id="playBtn">▶ Play Main Pattern</button>
+        <div class="action-bar">
+            <button id="saveBtn" class="secondary">💾 Download to Device</button>
+            <button id="submitBtn" class="submit-btn">🚀 Submit to Community Database</button>
+            <span style="font-size: 12px; color: #aaa;">💡 Tip: Click any grid cell to cycle hit intensity (Off → 75 → 100 → Off).</span>
         </div>
 
         <div id="patternsOutput"></div>
@@ -123,6 +159,7 @@
         reader.onload = function(e) {
             try {
                 currentData = JSON.parse(e.target.result);
+                document.getElementById('songNameInput').value = currentData.name || "Untitled";
                 renderPreview(currentData);
             } catch (err) {
                 alert("Invalid JSON file format!");
@@ -132,10 +169,23 @@
         reader.readAsText(file);
     });
 
+    document.getElementById('songNameInput').addEventListener('input', function(e) {
+        if (currentData) {
+            currentData.name = e.target.value;
+        }
+    });
+
+    function generateFileName(data, versionNum = 1) {
+        const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const beats = data.beats || 4;
+        const divs = data.divisions || 4;
+        const verSuffix = versionNum > 1 ? `_v${versionNum}` : '';
+        return `${cleanName}_${beats}_${divs}${verSuffix}.json`;
+    }
+
     function renderPreview(data) {
         document.getElementById('previewArea').style.display = 'block';
-        document.getElementById('songName').textContent = data.name || "Unnamed";
-        document.getElementById('timeSig').textContent = `${data.beats} / ${data.divisions || 4}`;
+        document.getElementById('timeSig').textContent = `${data.beats \vert{}\vert{} 4} /${data.divisions || 4}`;
 
         const container = document.getElementById('patternsOutput');
         container.innerHTML = '';
@@ -152,14 +202,22 @@
 
             const sectionDiv = document.createElement('div');
             sectionDiv.className = 'pattern-container';
-            sectionDiv.innerHTML = `<h2>${pt.title}</h2>`;
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'pattern-header';
+            headerDiv.innerHTML = `<h2>${pt.title}</h2>`;
+            
+            const playBtn = document.createElement('button');
+            playBtn.textContent = `▶ Play ${pt.title}`;
+            playBtn.onclick = () => playPattern(data[pt.key]);
+            headerDiv.appendChild(playBtn);
+            sectionDiv.appendChild(headerDiv);
 
             const table = document.createElement('table');
             const tracks = data[pt.key];
             const trackNames = Object.keys(tracks);
             const stepCount = tracks[trackNames[0]] ? tracks[trackNames[0]].length : 16;
 
-            // Header row (steps)
             let headerHtml = '<tr><th>Instrument</th>';
             for (let i = 0; i < stepCount; i++) {
                 headerHtml += `<th>${i + 1}</th>`;
@@ -167,21 +225,40 @@
             headerHtml += '</tr>';
             table.innerHTML = headerHtml;
 
-            // Instrument rows
             trackNames.forEach(instrument => {
                 const steps = tracks[instrument];
-                // Skip completely empty instruments to keep UI clean, or show all:
                 let rowHtml = `<tr><td class="instrument-name">${instrument}</td>`;
+                
                 for (let i = 0; i < stepCount; i++) {
                     const val = steps[i] || 0;
-                    if (val > 0) {
-                        rowHtml += `<td class="step-active" title="Velocity: ${val}">${val}</td>`;
-                    } else {
-                        rowHtml += `<td class="step-inactive">-</td>`;
-                    }
+                    let cssClass = 'step-inactive';
+                    if (val === 100) cssClass = 'step-active-100';
+                    else if (val > 0) cssClass = 'step-active-75';
+
+                    rowHtml += `<td class="step-cell ${cssClass}" data-pattern="${pt.key}" data-inst="${instrument}" data-step="${i}">${val > 0 ? val : '-'}</td>`;
                 }
                 rowHtml += '</tr>';
                 table.innerHTML += rowHtml;
+            });
+
+            table.addEventListener('click', function(e) {
+                const cell = e.target.closest('.step-cell');
+                if (!cell) return;
+
+                const pKey = cell.getAttribute('data-pattern');
+                const inst = cell.getAttribute('data-inst');
+                const stepIdx = parseInt(cell.getAttribute('data-step'));
+
+                let currentVal = data[pKey][inst][stepIdx];
+                let newVal = 0;
+                if (currentVal === 0) newVal = 75;
+                else if (currentVal === 75) newVal = 100;
+                else newVal = 0;
+
+                data[pKey][inst][stepIdx] = newVal;
+
+                cell.textContent = newVal > 0 ? newVal : '-';
+                cell.className = 'step-cell ' + (newVal === 100 ? 'step-active-100' : newVal === 75 ? 'step-active-75' : 'step-inactive');
             });
 
             sectionDiv.appendChild(table);
@@ -189,35 +266,67 @@
         });
     }
 
-    // Basic Web Audio synthesizer to preview rhythm clicks
-    document.getElementById('playBtn').addEventListener('click', () => {
+    // Local Download Handler
+    document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const fileName = generateFileName(currentData, 1);
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentData, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", fileName);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    });
+
+    // Submit to Database (GitHub Issue / Contribution template automation)
+    document.getElementById('submitBtn').addEventListener('click', () => {
+        if (!currentData) return;
         
-        const mainP = currentData.mainPattern;
-        const steps = mainP['Kick'].length;
-        const tempo = 120; // BPM assumption for preview
-        const stepTime = (60 / tempo) / 4; // 16th note duration
+        // Suggest a versioned filename to avoid direct clashes
+        const suggestedFileName = generateFileName(currentData, Math.floor(Math.random() * 900) + 100);
+        const jsonContent = JSON.stringify(currentData, null, 2);
+
+        // Construct pre-filled GitHub New Issue / Contribution URL
+        const repoOwner = "thebigg73";
+        const repoName = "OpenSongAppDrummer";
+        const title = `Community Pattern Submission: ${currentData.name || 'Untitled'}`;
+        const body = `Please add this community-submitted pattern to the database folder.\n\n**Suggested Filename:** \`${suggestedFileName}\`\n\n```json\n${jsonContent}\n````;
+
+        const githubUrl = `https://github.com/${repoOwner}/${repoName}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=pattern-submission`;
+        
+        window.open(githubUrl, '_blank');
+    });
+
+    // Web Audio Synthesizer player
+    function playPattern(patternMap) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const trackNames = Object.keys(patternMap);
+        const steps = patternMap[trackNames[0]].length;
+        const tempo = 120; 
+        const stepTime = (60 / tempo) / 4;
 
         let startTime = audioCtx.currentTime;
 
         for (let i = 0; i < steps; i++) {
             let time = startTime + (i * stepTime);
 
-            // Trigger Kick if velocity > 0
-            if (mainP['Kick'] && mainP['Kick'][i] > 0) {
-                playSynthDrum(time, 150, 0.05, 0.5);
+            if (patternMap['Kick'] && patternMap['Kick'][i] > 0) {
+                playSynthDrum(time, 150, 0.05, patternMap['Kick'][i] / 100);
             }
-            // Trigger Snare
-            if (mainP['Snare'] && mainP['Snare'][i] > 0) {
-                playSynthNoise(time, 0.08, 0.3);
+            if ((patternMap['Snare'] && patternMap['Snare'][i] > 0) || (patternMap['RimShot'] && patternMap['RimShot'][i] > 0)) {
+                let vel = Math.max(patternMap['Snare']?.[i] || 0, patternMap['RimShot']?.[i] || 0);
+                playSynthNoise(time, 0.08, 0.3 * (vel / 100));
             }
-            // Trigger HiHat
-            if (mainP['HatClosed'] && mainP['HatClosed'][i] > 0) {
-                playSynthNoise(time, 0.03, 0.1, 8000);
+            if ((patternMap['HatClosed'] && patternMap['HatClosed'][i] > 0) || (patternMap['HatOpen'] && patternMap['HatOpen'][i] > 0)) {
+                let isHatOpen = patternMap['HatOpen']?.[i] > 0;
+                let vel = Math.max(patternMap['HatClosed']?.[i] || 0, patternMap['HatOpen']?.[i] || 0);
+                playSynthNoise(time, isHatOpen ? 0.15 : 0.03, 0.15 * (vel / 100), 7000);
             }
         }
-    });
+    }
 
     function playSynthDrum(time, freq, duration, volume) {
         const osc = audioCtx.createOscillator();
