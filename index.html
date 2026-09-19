@@ -54,12 +54,13 @@
         }
         .meta-info {
             display: flex;
-            gap: 20px;
+            gap: 30px;
             align-items: center;
             background: #2a2a2a;
             padding: 12px 20px;
             border-radius: 6px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
         .pattern-container {
             margin-bottom: 24px;
@@ -194,6 +195,10 @@
                 <input type="text" id="songNameInput" style="margin-left: 8px;">
             </div>
             <div><strong>Time Signature:</strong> <span id="timeSig">-</span></div>
+            <div>
+                <label for="tempoSlider"><strong>Tempo:</strong> <span id="tempoVal">120</span> BPM</label><br>
+                <input type="range" id="tempoSlider" min="40" max="300" value="120" style="width: 150px; cursor: pointer;">
+            </div>
         </div>
 
         <div class="action-bar">
@@ -223,6 +228,13 @@
         "HatOpen": new Array(16).fill(0),
         "RimShot": new Array(16).fill(0)
     };
+
+    // Global Tempo Slider Live Update
+    const tempoSlider = document.getElementById('tempoSlider');
+    const tempoValDisplay = document.getElementById('tempoVal');
+    tempoSlider.addEventListener('input', (e) => {
+        tempoValDisplay.textContent = e.target.value;
+    });
 
     // Fetch repository database files on load
     window.addEventListener('DOMContentLoaded', () => {
@@ -356,7 +368,6 @@
         const divsPerBeat = data.divisions || 4;
         const stepsPerBar = beatsPerBar * divsPerBeat;
         const totalSteps = data.mainPattern[Object.keys(data.mainPattern)[0]].length;
-        const totalBars = Math.ceil(totalSteps / stepsPerBar);
 
         patternTypes.forEach(pt => {
             if (!data[pt.key]) return;
@@ -456,7 +467,6 @@
         const fileName = generateFileName(currentData, randVer);
         const jsonContent = JSON.stringify(currentData, null, 2);
         
-        // Copy JSON payload directly to clipboard
         navigator.clipboard.writeText(jsonContent).then(() => {
             showToast("JSON copied to clipboard! Creating file '" + fileName + "' on GitHub...");
             
@@ -477,15 +487,18 @@
         setTimeout(() => { toast.className = ""; }, 4000);
     }
 
-    // Web Audio Synthesizer player
+    // Web Audio Synthesizer player with dynamic global tempo
     function playPattern(patternMap) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
 
         const trackNames = Object.keys(patternMap);
         const steps = patternMap[trackNames[0]].length;
-        const tempo = 120; 
-        const stepTime = (60 / tempo) / 4;
+        
+        // Read current slider BPM
+        const currentBpm = parseInt(document.getElementById('tempoSlider').value) || 120;
+        // 16th notes time span based on BPM
+        const stepTime = (60 / currentBpm) / 4;
 
         let startTime = audioCtx.currentTime;
 
