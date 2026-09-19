@@ -94,6 +94,13 @@
             font-size: 11px;
         }
         th { background: #333; color: #fff; }
+        th.beat-group-header {
+            background: #383838;
+            color: #bb86fc;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
         th.beat-divider { border-left: 2px solid #bb86fc; }
         td.instrument-name {
             text-align: left;
@@ -154,22 +161,29 @@
         button.submit-btn { background-color: #ff7597; color: #121212; }
         button.submit-btn:hover { background-color: #ff527b; }
         
-        #toast {
-            visibility: hidden;
-            background-color: #03dac6;
-            color: #121212;
-            text-align: center;
-            border-radius: 6px;
-            padding: 14px;
+        /* Modal Overlay for GitHub Submission Guide */
+        #modalOverlay {
+            display: none;
             position: fixed;
-            z-index: 10;
-            left: 50%;
-            bottom: 30px;
-            transform: translateX(-50%);
-            font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
         }
-        #toast.show { visibility: visible; }
+        .modal-card {
+            background: #252525;
+            border: 2px solid #bb86fc;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.8);
+        }
+        .modal-card h3 { color: #03dac6; margin-top: 0; }
+        .modal-card p { text-align: left; line-height: 1.5; font-size: 14px; }
+        .modal-card code { background: #121212; padding: 2px 6px; border-radius: 4px; color: #bb86fc; }
     </style>
 </head>
 <body>
@@ -222,11 +236,25 @@
     </div>
 </div>
 
-<div id="toast">Copied to clipboard! Opening GitHub repository...</div>
+<!-- Modal instructions for GitHub Proposal -->
+<div id="modalOverlay">
+    <div class="modal-card">
+        <h3>🚀 Ready to Propose Pattern!</h3>
+        <p>Your pattern JSON has been <strong>copied to your clipboard</strong>. GitHub requires a manual paste for security reasons.</p>
+        <p><strong>Next steps:</strong><br>
+        1. Click the button below to open GitHub.<br>
+        2. Click inside the code editor box.<br>
+        3. Press <code>Ctrl + V</code> (or <code>Cmd + V</code>) to paste your pattern.<br>
+        4. Scroll down and click <strong>"Propose changes"</strong>.</p>
+        <button id="proceedGithubBtn" class="secondary" style="margin-top: 15px; width: 100%;">Open GitHub Editor ➔</button>
+        <br><button id="closeModalBtn" style="background: transparent; color: #888; margin-top: 10px; border: none; cursor: pointer;">Cancel</button>
+    </div>
+</div>
 
 <script>
     let currentData = null;
     let audioCtx = null;
+    let pendingGithubUrl = "";
 
     const REPO_OWNER = "thebigg73";
     const REPO_NAME = "OpenSongAppDrummer";
@@ -358,7 +386,6 @@
         }
     });
 
-    // Filename structure: songname_v[rand]_[beats]_[divisions].json
     function generateFileName(data, versionNum = 1) {
         const cleanName = (data.name || "drum_pattern").toLowerCase().replace(/[^a-z0-9]/g, '_');
         const beats = data.beats || 4;
@@ -405,14 +432,20 @@
             const tracks = data[pt.key];
             const trackNames = Object.keys(tracks);
 
-            // Build Header Row matching Android app style: Major Beat Numbers centered above each beat group
-            let headerHtml = '<tr><th>Instrument</th>';
+            // Build Header Row with Centered Beat Numbers spanning each beat group (e.g. colspan="4")
+            let headerHtml = '<tr><th rowspan="2">Instrument</th>';
+            for (let b = 0; b < beatsPerBar; b++) {
+                const beatDivClass = b > 0 ? ' beat-divider' : '';
+                headerHtml += '<th colspan="' + divsPerBeat + '" class="beat-group-header' + beatDivClass + '">' + (b + 1) + '</th>';
+            }
+            headerHtml += '</tr>';
+
+            // Sub-header row (empty spacer or sub-ticks if needed, keeping table grid aligned)
+            headerHtml += '<tr>';
             for (let b = 0; b < beatsPerBar; b++) {
                 for (let d = 0; d < divsPerBeat; d++) {
-                    const isBeatStart = (d === 0);
-                    const beatClass = isBeatStart && b > 0 ? ' beat-divider' : '';
-                    const label = (d === 0) ? (b + 1) : '';
-                    headerHtml += '<th class="' + beatClass + '">' + label + '</th>';
+                    const beatDivClass = (d === 0 && b > 0) ? ' beat-divider' : '';
+                    headerHtml += '<th class="' + beatDivClass + '" style="font-size:9px; color:#777; padding:2px;">·</th>';
                 }
             }
             headerHtml += '</tr>';
@@ -485,7 +518,7 @@
         downloadAnchor.remove();
     });
 
-    // Submit to Database via Clipboard & GitHub Navigation
+    // Submit to Database: Copy JSON & Show Guided Modal
     document.getElementById('submitBtn').addEventListener('click', () => {
         if (!currentData) return;
         
@@ -493,25 +526,24 @@
         const fileName = generateFileName(currentData, randVer);
         const jsonContent = JSON.stringify(currentData, null, 2);
         
+        pendingGithubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/new/main?filename=" + encodeURIComponent(DB_FOLDER + "/" + fileName);
+
         navigator.clipboard.writeText(jsonContent).then(() => {
-            showToast("JSON copied to clipboard! Creating file '" + fileName + "' on GitHub...");
-            
-            setTimeout(() => {
-                const githubUrl = "https://github.com/" + REPO_OWNER + "/" + REPO_NAME + "/new/main?filename=" + encodeURIComponent(DB_FOLDER + "/" + fileName);
-                window.open(githubUrl, '_blank');
-            }, 1200);
+            document.getElementById('modalOverlay').style.display = 'flex';
         }).catch(err => {
             alert("Clipboard permission blocked. Please download the file and upload it manually.");
             console.error(err);
         });
     });
 
-    function showToast(msg) {
-        const toast = document.getElementById("toast");
-        toast.textContent = msg;
-        toast.className = "show";
-        setTimeout(() => { toast.className = ""; }, 4000);
-    }
+    document.getElementById('proceedGithubBtn').addEventListener('click', () => {
+        document.getElementById('modalOverlay').style.display = 'none';
+        window.open(pendingGithubUrl, '_blank');
+    });
+
+    document.getElementById('closeModalBtn').addEventListener('click', () => {
+        document.getElementById('modalOverlay').style.display = 'none';
+    });
 
     // Web Audio Synthesizer player with dynamic global tempo
     function playPattern(patternMap) {
