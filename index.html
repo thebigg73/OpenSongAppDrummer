@@ -736,6 +736,44 @@
                      newVal === 50 ? 'step-active-50' : 'step-inactive') + beatClass;
             }
 
+            let longPressTimer = null;
+            let isLongPress = false;
+
+            // 1. Mouse down starts a timer for long-press on desktop
+            table.addEventListener('mousedown', function(e) {
+                const cell = e.target.closest('.step-cell');
+                if (!cell) return;
+
+                // Only trigger on left-click (button 0)
+                if (e.button !== 0) return;
+
+                isLongPress = false;
+    
+                const pKey = cell.getAttribute('data-pattern');
+                const inst = cell.getAttribute('data-inst');
+                const stepIdx = parseInt(cell.getAttribute('data-step'));
+
+                // Set a timer for 500ms to count as a long-press
+                longPressTimer = setTimeout(() => {
+                    isLongPress = true;
+                    updateCellData(cell, pKey, inst, stepIdx, 0); // Reset to 0 on long-press
+                }, 500); 
+            });
+
+            // 2. If the mouse is released or leaves before 500ms, cancel the long-press timer
+            table.addEventListener('mouseup', function(e) {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            });
+
+            table.addEventListener('mouseleave', function(e) {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            });
             // 2. Event listeners attached to the table
             table.addEventListener('click', function(e) {
                 const cell = e.target.closest('.step-cell');
