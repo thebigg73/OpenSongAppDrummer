@@ -738,16 +738,17 @@
 
             let longPressTimer = null;
             let isLongPress = false;
+            let justLongPressed = false;
 
             // 1. Mouse down starts a timer for long-press on desktop
             table.addEventListener('mousedown', function(e) {
                 const cell = e.target.closest('.step-cell');
                 if (!cell) return;
 
-                // Only trigger on left-click (button 0)
-                if (e.button !== 0) return;
+                if (e.button !== 0) return; // Only left-click
 
                 isLongPress = false;
+                justLongPressed = false;
     
                 const pKey = cell.getAttribute('data-pattern');
                 const inst = cell.getAttribute('data-inst');
@@ -756,11 +757,12 @@
                 // Set a timer for 500ms to count as a long-press
                 longPressTimer = setTimeout(() => {
                     isLongPress = true;
+                    justLongPressed = true;
                     updateCellData(cell, pKey, inst, stepIdx, 0); // Reset to 0 on long-press
                 }, 500); 
             });
 
-            // 2. If the mouse is released or leaves before 500ms, cancel the long-press timer
+            // 2. Clear timer on mouseup or leave
             table.addEventListener('mouseup', function(e) {
                 if (longPressTimer) {
                     clearTimeout(longPressTimer);
@@ -774,10 +776,19 @@
                     longPressTimer = null;
                 }
             });
-            // 2. Event listeners attached to the table
+
+            // 3. Regular click event
             table.addEventListener('click', function(e) {
                 const cell = e.target.closest('.step-cell');
                 if (!cell) return;
+
+                // If a long press just happened, ignore this click event entirely
+                if (isLongPress || justLongPressed) {
+                    isLongPress = false;
+                    // Small timeout to reset the blocker so normal clicks work again afterwards
+                    setTimeout(() => { justLongPressed = false; }, 50);
+                    return;
+                }
 
                 const pKey = cell.getAttribute('data-pattern');
                 const inst = cell.getAttribute('data-inst');
@@ -791,26 +802,22 @@
                 else if (currentVal === 100) newVal = 127;
                 else newVal = 0;
 
-                updateCellData(cell, pKey, inst, stepIdx, newVal);
+               updateCellData(cell, pKey, inst, stepIdx, newVal);
             });
 
+            // 4. Mobile long-press (contextmenu)
             table.addEventListener('contextmenu', function(e) {
                 const cell = e.target.closest('.step-cell');
                 if (!cell) return;
 
-                e.preventDefault(); // Prevents the default mobile/desktop context menu
+                e.preventDefault();
 
                 const pKey = cell.getAttribute('data-pattern');
                 const inst = cell.getAttribute('data-inst');
-                const stepIdx = parseInt(cell.getAttribute('data-step'));
+            const stepIdx = parseInt(cell.getAttribute('data-step'));
 
-                updateCellData(cell, pKey, inst, stepIdx, 0);
-            });
-            
-            sectionDiv.appendChild(table);
-            container.appendChild(sectionDiv);
-        });
-    }
+            updateCellData(cell, pKey, inst, stepIdx, 0);
+       });
 
     document.getElementById('saveBtn').addEventListener('click', () => {
         if (!currentData) return;
